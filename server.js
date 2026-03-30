@@ -183,17 +183,104 @@ cron.schedule('0 8 * * *', async () => {
   const dueToday = active.filter(t => t.due === today() || t.scheduled === today());
   const acorns = tasks.filter(t => t.done).length;
 
-  let body = `You have ${active.length} things on your plate.`;
-  if (overdue.length) body += ` ⚠️ ${overdue.length} overdue!`;
-  if (dueToday.length) body += ` 📌 ${dueToday.length} due today.`;
-  body += ` 🌰 ${acorns} acorns collected.`;
+  let body = `${active.length} tasks open`;
+  if (overdue.length) body += `, ${overdue.length} overdue ⚠️`;
+  if (dueToday.length) body += `, ${dueToday.length} due today 📌`;
+  body += `. Open Pip for your morning briefing 🐿️`;
 
   await sendToAll({
-    title: 'Pip 🐿️ Good morning!',
+    title: 'Good morning! Pip is ready 🌅',
     body,
     tag: 'pip-morning',
     url: '/'
   });
+});
+
+// 📌 Due today/tomorrow reminder — 9:00am
+cron.schedule('0 9 * * *', async () => {
+  const tasks = await fetchTasks();
+  const dueTomorrow = tasks.filter(t => !t.done && t.due && daysUntil(t.due) === 1);
+  if (!dueTomorrow.length) return;
+  await sendToAll({
+    title: 'Pip 🐿️ Due tomorrow',
+    body: `🌰 Don't forget: ${dueTomorrow.slice(0,3).map(t=>t.title).join(', ')}${dueTomorrow.length>3?` + ${dueTomorrow.length-3} more`:''}`,
+    tag: 'pip-due-tomorrow',
+    url: '/'
+  });
+});
+
+// 😬 Overdue nudge — 2:00pm
+cron.schedule('0 14 * * *', async () => {
+  const tasks = await fetchTasks();
+  const overdue = tasks.filter(t => !t.done && t.due && daysUntil(t.due) < 0);
+  if (!overdue.length) return;
+  const dreaded = overdue.find(t => t.mood === 'dreading');
+  const body = dreaded
+    ? `😬 "${dreaded.title}" is still waiting… Pip believes in you. Just 5 minutes?`
+    : `${overdue.length} task${overdue.length>1?'s are':' is'} overdue. Pip is holding them safely 🌰`;
+  await sendToAll({
+    title: 'Pip 🐿️ gentle nudge',
+    body,
+    tag: 'pip-overdue',
+    url: '/'
+  });
+});
+
+// 🛁 Recovery day reminder — 8:05am
+cron.schedule('5 8 * * *', async () => {
+  const events = await fetchEvents();
+  const rec = recDates(events);
+  if (!rec.has(today())) return;
+  await sendToAll({
+    title: 'Pip 🐿️ Recovery day 🛁',
+    body: "Today is a recovery day. Keep it light, recharge, and be kind to yourself. Pip's orders! 🌿",
+    tag: 'pip-recovery',
+    url: '/'
+  });
+});
+
+// 🌙 Evening check-in — 7:00pm
+cron.schedule('0 19 * * *', async () => {
+  const { data } = await supabase.from('settings').select('*').eq('id', 'last_seen');
+  const lastSeen = data?.[0]?.data?.date;
+  if (lastSeen === today()) return;
+  await sendToAll({
+    title: 'Pip 🐿️ Evening check-in',
+    body: "Haven't heard from you today! Open Pip to check in — anything to add before the day's done? 🌰",
+    tag: 'pip-evening',
+    url: '/'
+  });
+});
+
+// 📋 Friday planning reminder — 4:00pm Friday
+cron.schedule('0 16 * * 5', async () => {
+  const tasks = await fetchTasks();
+  const unscheduled = tasks.filter(t => !t.done && !t.scheduled && !t.due);
+  await sendToAll({
+    title: 'Pip 🐿️ Friday — time to plan! 📋',
+    body: `Open Pip to do your weekly review and plan next week! ${unscheduled.length > 0 ? `${unscheduled.length} tasks still need scheduling 🌰` : 'Let\'s set you up for success 🌿'}`,
+    tag: 'pip-friday',
+    url: '/'
+  });
+});
+
+// 📵 Phone down — 11:00pm weekdays
+cron.schedule('0 23 * * 1-5', async () => {
+  await sendToAll({
+    title: 'Pip 🐿️ phone down time!',
+    body: "Hey! It's 11pm. Put the phone down, rest your brain. Tomorrow's tasks will still be there 🌿💤",
+    tag: 'pip-bedtime',
+    url: '/'
+  });
+});
+
+// Health check
+app.get('/', (req, res) => res.json({ status: 'Pip is awake! 🐿️', subscriptions: subscriptions.length }));
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, async () => {
+  await loadSubscriptions();
+  console.log(`🐿️ Pip notification server running on port ${PORT}`);
 });
 
 // 📌 Due today/tomorrow reminder — 9:00am
@@ -277,26 +364,6 @@ cron.schedule('0 23 * * 1-5', async () => {
 
 // Health check
 app.get('/', (req, res) => res.json({ status: 'Pip is awake! 🐿️', subscriptions: subscriptions.length }));
-
-// ── ANTHROPIC PROXY ───────────────────────────────────────────────────────────
-// Routes Claude API calls through the server so the PWA app isn't blocked by CSP
-app.post('/claude', async (req, res) => {
-  try {
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-      },
-      body: JSON.stringify(req.body),
-    });
-    const data = await response.json();
-    res.json(data);
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
