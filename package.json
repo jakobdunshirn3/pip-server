@@ -1,0 +1,23 @@
+{
+  "name": "pip-notification-server",
+  "version": "1.0.0",
+  "description": "Pip's notification server — push alerts for your planning squirrel",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "generate-vapid": "node -e \"const wp=require('web-push');const keys=wp.generateVAPIDKeys();console.log('VAPID_PUBLIC_KEY='+keys.publicKey);console.log('VAPID_PRIVATE_KEY='+keys.privateKey);\""
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "googleapis": "^133.0.0",
+    "multer": "^1.4.5-lts.1",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^3.3.2",
+    "web-push": "^3.6.6"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
